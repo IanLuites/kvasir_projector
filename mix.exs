@@ -1,11 +1,11 @@
 defmodule Kvasir.Projector.MixProject do
   use Mix.Project
-  @version "0.0.1-proto0"
+  @version "0.0.1-proto7"
 
   def project do
     [
       app: :kvasir_projector,
-      description: "Kvasir projector extension to allow event projection.",
+      description: "Kvasir projector extension to for allow event projection.",
       version: @version,
       elixir: "~> 1.7",
       build_embedded: Mix.env() == :prod,
@@ -56,15 +56,19 @@ defmodule Kvasir.Projector.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {Kvasir.Projector.Application, []}
+      extra_applications: [:logger]
+      # mod: {Kvasir.Projector.Application, []}
     ]
   end
 
   defp deps do
-    [
-      # {:kvasir, path: "../core", optional: true},
-      {:ex_doc, ">= 0.0.0", only: :dev}
-    ]
+    if System.get_env("KVASIR_LOCAL_PUBLISH") == "a-ok" do
+      [
+        {:kvasir, ">= #{@version}", optional: true},
+        {:ex_doc, ">= 0.0.0", only: :dev}
+      ]
+    else
+      []
+    end
   end
 end
