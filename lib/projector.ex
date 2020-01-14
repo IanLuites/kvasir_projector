@@ -22,7 +22,7 @@ defmodule Kvasir.Projector do
         @projections unquote(projections)
 
         @doc false
-        @spec child_spec(opts :: Keyword.t()) :: Supervisor.child_sec()
+        @spec child_spec(opts :: Keyword.t()) :: Supervisor.child_spec()
         def child_spec(_opts \\ []), do: unquote(__MODULE__).child_spec(__MODULE__)
 
         @doc false
