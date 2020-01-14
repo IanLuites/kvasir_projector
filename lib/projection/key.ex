@@ -1,6 +1,7 @@
 defmodule Kvasir.Projection.Key do
   @callback init(key :: term) :: {:ok, state :: term}
-  @callback apply(Kvasir.Event.t(), state :: term) :: :ok | {:error, atom}
+  @callback apply(Kvasir.Event.t(), state :: term) ::
+              :ok | {:ok, state :: term} | :delete | {:error, atom}
 
   alias Kvasir.Event
 

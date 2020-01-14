@@ -1,6 +1,7 @@
 defmodule Kvasir.Projection.Partition do
   @callback init(partition :: non_neg_integer) :: {:ok, state :: term}
-  @callback apply(Kvasir.Event.t(), state :: term) :: :ok | {:error, atom}
+  @callback apply(Kvasir.Event.t(), state :: term) ::
+              :ok | {:ok, state :: term} | :delete | {:error, atom}
 
   def start_link(opts \\ []) do
     %{
