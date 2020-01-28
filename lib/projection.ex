@@ -10,7 +10,7 @@ defmodule Kvasir.Projection do
         s -> raise "Unknown state: #{inspect(s)}"
       end
 
-    subscribe_opts = opts |> Keyword.take(~w(only)a) |> Keyword.put(:group, name)
+    subscribe_opts = opts |> Keyword.take(~w(only on_error)a) |> Keyword.put(:group, name)
 
     quote location: :keep do
       @behaviour unquote(type)
@@ -28,4 +28,15 @@ defmodule Kvasir.Projection do
       end
     end
   end
+
+  require Logger
+
+  def handle_error(err, :error), do: err
+
+  def handle_error(err, :skip) do
+    Logger.warn(fn -> "Projection Skipped: #{inspect(err)}" end)
+    :ok
+  end
+
+  def handle_error(err, callback) when is_function(callback, 1), do: callback.(err)
 end

@@ -12,18 +12,22 @@ defmodule Kvasir.Projection.Partition do
     config =
       opts
       |> Keyword.take(~w(group only)a)
-      |> Keyword.put(:state, opts[:projection])
+      |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
 
     source.subscribe(topic, __MODULE__, config)
   end
 
-  def init(_topic, partition, projection) do
+  def init(_topic, partition, {projection, on_error}) do
     with {:ok, state} <- projection.init(partition) do
-      {:ok, {projection, state}}
+      {:ok, {projection, on_error, state}}
     end
   end
 
-  def event(event, {projection, state}) do
-    with {:ok, new_state} <- projection.apply(event, state), do: {:ok, {projection, new_state}}
+  def event(event, {projection, on_error, state}) do
+    case projection.apply(event, state) do
+      :ok -> :ok
+      {:ok, new_state} -> {:ok, {projection, on_error, new_state}}
+      err -> Kvasir.Projection.handle_error(err, on_error)
+    end
   end
 end

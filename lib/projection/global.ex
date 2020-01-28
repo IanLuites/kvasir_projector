@@ -10,14 +10,18 @@ defmodule Kvasir.Projection.Global do
     config =
       opts
       |> Keyword.take(~w(group only)a)
-      |> Keyword.put(:state, opts[:projection])
+      |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
 
     source.subscribe(topic, __MODULE__, config)
   end
 
   def init(_topic, _partition, projection), do: {:ok, projection}
 
-  def event(event, projection) do
-    with {:ok, _} <- projection.apply(event), do: :ok
+  def event(event, {projection, on_error}) do
+    case projection.apply(event) do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      err -> Kvasir.Projection.handle_error(err, on_error)
+    end
   end
 end

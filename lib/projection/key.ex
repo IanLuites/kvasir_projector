@@ -14,23 +14,23 @@ defmodule Kvasir.Projection.Key do
     config =
       opts
       |> Keyword.take(~w(group only)a)
-      |> Keyword.put(:state, opts[:projection])
+      |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
 
     source.subscribe(topic, __MODULE__, config)
   end
 
-  def init(_topic, partition, projection) do
+  def init(_topic, partition, {projection, on_error}) do
     registry = Module.concat(projection, "Registry#{partition}")
     supervisor = Module.concat(projection, "Supervisor#{partition}")
 
     with {:ok, _} <- Registry.start_link(keys: :unique, name: registry),
          {:ok, _} <-
            Supervisor.start_link([], name: supervisor, strategy: :one_for_one) do
-      {:ok, {registry, supervisor, projection}}
+      {:ok, {registry, supervisor, projection, on_error}}
     end
   end
 
-  def event(event, state = {registry, supervisor, projection}) do
+  def event(event, state = {registry, supervisor, projection, on_error}) do
     key = Event.key(event)
 
     with {:ok, p} <- projection(registry, supervisor, projection, key),
@@ -38,6 +38,7 @@ defmodule Kvasir.Projection.Key do
       :ok
     else
       {:error, :projection_died} -> event(event, state)
+      err -> Kvasir.Projection.handle_error(err, on_error)
     end
   end
 
