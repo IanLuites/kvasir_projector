@@ -10,11 +10,16 @@ defmodule Kvasir.Projection.Key.Instance do
   end
 
   def handle_call({:event, event}, _from, s = {projection, key, state}) do
-    case projection.apply(event, state) do
+    with {:ok, new_state} <- projection.apply(event, state),
+         :ok <- store_state(projection, key, new_state) do
+      {:reply, :ok, {projection, key, new_state}}
+    else
       :ok -> {:reply, :ok, s}
-      {:ok, new_state} -> {:reply, :ok, {projection, key, new_state}}
-      :delete -> {:stop, :normal, :ok, s}
+      :delete -> {:stop, :normal, delete_state(projection, key), s}
       err -> {:reply, err, s}
     end
   end
+
+  defp store_state(_, _, _), do: :ok
+  defp delete_state(_, _), do: :ok
 end
