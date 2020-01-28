@@ -34,9 +34,17 @@ defmodule Kvasir.Projection.Key do
     key = Event.key(event)
 
     with {:ok, p} <- projection(registry, supervisor, projection, key),
-         :ok <- GenServer.call(p, {:event, event}, 60_000) do
-      {:ok, state}
+         :ok <- project(p, event) do
+      :ok
+    else
+      {:error, :projection_died} -> event(event, state)
     end
+  end
+
+  defp project(projection, event) do
+    GenServer.call(projection, {:event, event}, 60_000)
+  rescue
+    _ -> {:error, :projection_died}
   end
 
   ### Projection Management ###
