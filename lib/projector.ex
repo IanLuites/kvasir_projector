@@ -3,6 +3,8 @@ defmodule Kvasir.Projector do
   Documentation for Kvasir.Projector.
   """
 
+  @callback config(atom, Keyword.t()) :: Keyword.t()
+
   defmacro __using__(opts \\ []) do
     ### Actual Logic ###
     source = opts[:source] || raise "Need to pass the Kvasir EventSource."
@@ -14,6 +16,7 @@ defmodule Kvasir.Projector do
     # Disabled environments
     unless Mix.env() in (opts[:disable] || []) do
       quote location: :keep do
+        @behaviour unquote(__MODULE__)
         require unquote(source)
 
         @source unquote(source)
@@ -52,6 +55,7 @@ defmodule Kvasir.Projector do
 
         @doc false
         @spec config(atom, Keyword.t()) :: Keyword.t()
+        @impl unquote(__MODULE__)
         def config(_, opts), do: opts
 
         defoverridable config: 2
