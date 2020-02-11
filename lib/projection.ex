@@ -10,7 +10,7 @@ defmodule Kvasir.Projection do
         s -> raise "Unknown state: #{inspect(s)}"
       end
 
-    subscribe_opts = opts |> Keyword.take(~w(only on_error)a) |> Keyword.put(:group, name)
+    subscribe_opts = opts |> Keyword.take(~w(only on_error persist)a) |> Keyword.put(:group, name)
 
     quote location: :keep do
       @behaviour unquote(type)
