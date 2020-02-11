@@ -7,33 +7,41 @@ defmodule Kvasir.Projection.Key do
 
   def start_link(opts \\ []) do
     %{
+      state: {cache, _},
       topic: topic,
       source: source
     } = opts[:projector].__projector__(:config)
 
+    state =
+      if opts[:persist] do
+        {opts[:projection], opts[:on_error] || :error, cache}
+      else
+        {opts[:projection], opts[:on_error] || :error, nil}
+      end
+
     config =
       opts
       |> Keyword.take(~w(group only)a)
-      |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
+      |> Keyword.put(:state, state)
 
     source.subscribe(topic, __MODULE__, config)
   end
 
-  def init(_topic, partition, {projection, on_error}) do
+  def init(_topic, partition, {projection, on_error, cache}) do
     registry = Module.concat(projection, "Registry#{partition}")
     supervisor = Module.concat(projection, "Supervisor#{partition}")
 
     with {:ok, _} <- Registry.start_link(keys: :unique, name: registry),
          {:ok, _} <-
            Supervisor.start_link([], name: supervisor, strategy: :one_for_one) do
-      {:ok, {registry, supervisor, projection, on_error}}
+      {:ok, {registry, supervisor, projection, on_error, cache}}
     end
   end
 
-  def event(event, state = {registry, supervisor, projection, on_error}) do
+  def event(event, state = {registry, supervisor, projection, on_error, cache}) do
     key = Event.key(event)
 
-    with {:ok, p} <- projection(registry, supervisor, projection, key),
+    with {:ok, p} <- projection(registry, supervisor, projection, key, cache),
          :ok <- project(p, event) do
       :ok
     else
@@ -50,20 +58,20 @@ defmodule Kvasir.Projection.Key do
 
   ### Projection Management ###
 
-  defp projection(registry, supervisor, projection, key) do
+  defp projection(registry, supervisor, projection, key, cache) do
     if pid = whereis(registry, key) do
       {:ok, pid}
     else
-      start(registry, supervisor, projection, key)
+      start(registry, supervisor, projection, key, cache)
     end
   end
 
-  defp start(registry, supervisor, projection, key) do
+  defp start(registry, supervisor, projection, key, cache) do
     via_name = {:via, Registry, {registry, key}}
 
     spec = %{
       id: key,
-      start: {__MODULE__.Instance, :start_link, [projection, key, [name: via_name]]},
+      start: {__MODULE__.Instance, :start_link, [projection, key, cache, [name: via_name]]},
       restart: :transient
     }
 
