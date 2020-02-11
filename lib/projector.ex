@@ -13,7 +13,7 @@ defmodule Kvasir.Projector do
 
     # Disabled environments
     unless Mix.env() in (opts[:disable] || []) do
-      quote do
+      quote location: :keep do
         require unquote(source)
 
         @source unquote(source)
@@ -49,6 +49,12 @@ defmodule Kvasir.Projector do
         def __projector__(:hex), do: unquote(hex)
         def __projector__(:hexdocs), do: unquote(hexdocs)
         def __projector__(:code_source), do: unquote(code_source)
+
+        @doc false
+        @spec config(atom, Keyword.t()) :: Keyword.t()
+        def config(_, opts), do: opts
+
+        defoverridable config: 2
       end
     end
   end
@@ -67,6 +73,10 @@ defmodule Kvasir.Projector do
       |> Enum.map(& &1.child_spec(projector: projector, projection: &1))
       |> Enum.reject(&(&1 == :no_start))
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: projector)
+    {mod, config} = projector.__projector__(:state)
+    config = projector.config(:cache, config)
+    {:ok, caches} = :projections |> projector.__projector__() |> EnumX.map(&mod.init(&1, config))
+
+    Supervisor.start_link(caches ++ children, strategy: :one_for_one, name: projector)
   end
 end
