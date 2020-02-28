@@ -78,8 +78,15 @@ defmodule Kvasir.Projector do
       |> Enum.reject(&(&1 == :no_start))
 
     {mod, config} = projector.__projector__(:state)
-    config = projector.config(:cache, config)
-    {:ok, caches} = :projections |> projector.__projector__() |> EnumX.map(&mod.init(&1, config))
+
+    caches =
+      if mod do
+        config = projector.config(:cache, config)
+        {:ok, c} = :projections |> projector.__projector__() |> EnumX.map(&mod.init(&1, config))
+        c
+      else
+        []
+      end
 
     Supervisor.start_link(caches ++ children, strategy: :one_for_one, name: projector)
   end
