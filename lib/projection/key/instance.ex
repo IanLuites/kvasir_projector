@@ -26,7 +26,7 @@ defmodule Kvasir.Projection.Key.Instance do
     o = event.__meta__.offset
 
     if o <= offset do
-      :ok
+      {:reply, :ok, s}
     else
       with {:ok, new_state} <- projection.apply(event, state),
            :ok <- store_state(cache, projection, key, o, new_state) do
