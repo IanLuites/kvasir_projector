@@ -20,10 +20,15 @@ defmodule Kvasir.Projection.BackOff do
     17 => 15 * 60_000
   }
 
+  @spec standard(non_neg_integer) :: :retry | :fail
   def standard(attempt) do
-    with {:ok, sleep} <- Map.fetch(@standard, attempt) do
-      :timer.sleep(sleep)
-      :retry
+    case Map.fetch(@standard, attempt) do
+      {:ok, sleep} ->
+        :timer.sleep(sleep)
+        :retry
+
+      _ ->
+        :fail
     end
   end
 end

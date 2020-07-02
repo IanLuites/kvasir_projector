@@ -29,6 +29,7 @@ defmodule Kvasir.Projection do
       end
 
       @doc false
+      @spec back_off(non_neg_integer) :: :retry | :fail
       defdelegate back_off(attempt), unquote(back_off)
     end
   end
