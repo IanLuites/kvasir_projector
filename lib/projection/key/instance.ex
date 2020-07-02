@@ -1,4 +1,6 @@
 defmodule Kvasir.Projection.Key.Instance do
+  alias Kvasir.Projection
+
   def start_link(projection, on_error, key, cache, opts \\ []) do
     GenServer.start_link(__MODULE__, {projection, on_error, key, cache}, opts)
   end
@@ -28,7 +30,7 @@ defmodule Kvasir.Projection.Key.Instance do
     if o <= offset do
       {:reply, :ok, s}
     else
-      with {:ok, new_state} <- projection.__apply__(event, state, on_error),
+      with {:ok, new_state} <- Projection.apply(projection, event, state, on_error),
            :ok <- store_state(cache, projection, key, o, new_state) do
         {:reply, :ok, {projection, on_error, key, new_state, o, cache}}
       else

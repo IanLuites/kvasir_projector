@@ -1,4 +1,6 @@
 defmodule Kvasir.Projection.Partition do
+  alias Kvasir.Projection
+
   @callback init(partition :: non_neg_integer) :: {:ok, state :: term}
   @callback apply(Kvasir.Event.t(), state :: term) ::
               :ok | {:ok, state :: term} | :delete | {:error, atom}
@@ -24,7 +26,7 @@ defmodule Kvasir.Projection.Partition do
   end
 
   def event(event, {projection, on_error, state}) do
-    case projection.__apply__(event, state, on_error) do
+    case Projection.apply(projection, event, state, on_error) do
       :ok -> :ok
       {:ok, new_state} -> {:ok, {projection, on_error, new_state}}
       err -> err
