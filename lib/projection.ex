@@ -50,7 +50,7 @@ defmodule Kvasir.Projection do
             @spec __apply__(Kvasir.Event.t(), state :: term, attempt :: non_neg_integer) ::
                     :ok | {:ok, state :: term} | :delete | {:error, atom}
             def __apply__(event, state, on_error, attempt \\ 0) do
-              case apply(event) do
+              case apply(event, state) do
                 :ok ->
                   :ok
 
