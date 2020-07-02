@@ -41,12 +41,12 @@ defmodule Kvasir.Projection.Key do
   def event(event, state = {registry, supervisor, projection, on_error, cache}) do
     key = Event.key(event)
 
-    with {:ok, p} <- projection(registry, supervisor, projection, key, cache),
+    with {:ok, p} <- projection(registry, supervisor, projection, on_error, key, cache),
          :ok <- project(p, event) do
       :ok
     else
       {:error, :projection_died} -> event(event, state)
-      err -> Kvasir.Projection.handle_error(err, on_error)
+      err -> err
     end
   end
 
@@ -58,20 +58,21 @@ defmodule Kvasir.Projection.Key do
 
   ### Projection Management ###
 
-  defp projection(registry, supervisor, projection, key, cache) do
+  defp projection(registry, supervisor, projection, on_error, key, cache) do
     if pid = whereis(registry, key) do
       {:ok, pid}
     else
-      start(registry, supervisor, projection, key, cache)
+      start(registry, supervisor, projection, on_error, key, cache)
     end
   end
 
-  defp start(registry, supervisor, projection, key, cache) do
+  defp start(registry, supervisor, projection, on_error, key, cache) do
     via_name = {:via, Registry, {registry, key}}
 
     spec = %{
       id: key,
-      start: {__MODULE__.Instance, :start_link, [projection, key, cache, [name: via_name]]},
+      start:
+        {__MODULE__.Instance, :start_link, [projection, on_error, key, cache, [name: via_name]]},
       restart: :transient
     }
 

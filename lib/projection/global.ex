@@ -18,10 +18,10 @@ defmodule Kvasir.Projection.Global do
   def init(_topic, _partition, projection), do: {:ok, projection}
 
   def event(event, {projection, on_error}) do
-    case projection.apply(event) do
+    case projection.__apply__(event, on_error) do
       :ok -> :ok
       {:ok, _} -> :ok
-      err -> Kvasir.Projection.handle_error(err, on_error)
+      err -> err
     end
   end
 end

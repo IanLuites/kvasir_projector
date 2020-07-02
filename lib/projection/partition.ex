@@ -24,10 +24,10 @@ defmodule Kvasir.Projection.Partition do
   end
 
   def event(event, {projection, on_error, state}) do
-    case projection.apply(event, state) do
+    case projection.__apply__(event, state, on_error) do
       :ok -> :ok
       {:ok, new_state} -> {:ok, {projection, on_error, new_state}}
-      err -> Kvasir.Projection.handle_error(err, on_error)
+      err -> err
     end
   end
 end
