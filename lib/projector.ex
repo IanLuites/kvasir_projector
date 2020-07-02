@@ -9,9 +9,14 @@ defmodule Kvasir.Projector do
     ### Actual Logic ###
     source = opts[:source] || raise "Need to pass the Kvasir EventSource."
     topic = opts[:topic] || raise "Need to pass the Kafka topic."
-    projections = Kvasir.Projector.Config.projections!(opts)
     {state, state_opts} = Macro.expand(Kvasir.Projector.Config.state!(opts), __CALLER__)
     {app, version, hex, hexdocs, code_source} = Kvasir.Util.documentation(__CALLER__)
+
+    projections =
+      opts
+      |> Kvasir.Projector.Config.projections!()
+      |> Enum.map(&Macro.expand(&1, __CALLER__))
+      |> List.flatten()
 
     if state == false and Enum.any?(projections, & &1.__projection__(:stateful)) do
       raise """
