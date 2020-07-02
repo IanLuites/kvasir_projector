@@ -1,6 +1,7 @@
 defmodule Kvasir.Projector.Config do
   def state(opts) do
     case opts[:cache] || settings()[:cache] do
+      nil -> {false, []}
       {mod, opt} -> {mod, opt}
       mod -> {mod, []}
     end

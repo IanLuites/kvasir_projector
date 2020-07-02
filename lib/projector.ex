@@ -13,6 +13,21 @@ defmodule Kvasir.Projector do
     {state, state_opts} = Macro.expand(Kvasir.Projector.Config.state!(opts), __CALLER__)
     {app, version, hex, hexdocs, code_source} = Kvasir.Util.documentation(__CALLER__)
 
+    if state == false and Enum.any?(projections, & &1.__projection__(:stateful)) do
+      raise """
+      No state configured.
+
+      State is required for the following projections:
+
+        #{
+        projections
+        |> Enum.filter(& &1.__projection__(:stateful))
+        |> Enum.map(&inspect/1)
+        |> Enum.join(", ")
+      }
+      """
+    end
+
     # Disabled environments
     unless Mix.env() in (opts[:disable] || []) do
       quote location: :keep do
@@ -21,7 +36,7 @@ defmodule Kvasir.Projector do
 
         @source unquote(source)
         @topic unquote(topic)
-        @state unquote({state, Macro.escape(state_opts)})
+        @state unquote(state && {state, Macro.escape(state_opts)})
         @projections unquote(projections)
 
         @doc false

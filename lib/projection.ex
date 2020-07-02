@@ -31,6 +31,10 @@ defmodule Kvasir.Projection do
       @doc false
       @spec back_off(non_neg_integer) :: :retry | :fail
       defdelegate back_off(attempt), unquote(back_off)
+
+      @doc false
+      @spec __projection__(:stateful) :: term
+      def __projection__(:stateful), do: unquote(type != __MODULE__.Global)
     end
   end
 
