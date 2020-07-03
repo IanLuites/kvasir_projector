@@ -97,10 +97,9 @@ defmodule Kvasir.Projector do
       |> Enum.map(& &1.child_spec(projector: projector, projection: &1))
       |> Enum.reject(&(&1 == :no_start))
 
-    {mod, config} = projector.__projector__(:state)
-
     caches =
-      if mod do
+      if state = projector.__projector__(:state) do
+        {mod, config} = state
         config = projector.config(:cache, config)
         {:ok, c} = :projections |> projector.__projector__() |> EnumX.map(&mod.init(&1, config))
         c
