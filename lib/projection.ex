@@ -73,6 +73,9 @@ defmodule Kvasir.Projection do
       :ok ->
         :ok
 
+      :delete ->
+        :delete
+
       r = {:ok, _} ->
         r
 
