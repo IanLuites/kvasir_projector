@@ -50,8 +50,11 @@ defmodule Kvasir.Projection.Key do
     end
   end
 
+  # Work around
+  @key_projection_timeout String.to_integer(System.get_env("KEY_PROJECTION_TIMEOUT", "60000"))
+
   defp project(projection, event) do
-    GenServer.call(projection, {:event, event}, 60_000)
+    GenServer.call(projection, {:event, event}, @key_projection_timeout)
   rescue
     _ -> {:error, :projection_died}
   end
