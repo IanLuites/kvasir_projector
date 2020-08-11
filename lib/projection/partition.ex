@@ -11,11 +11,12 @@ defmodule Kvasir.Projection.Partition do
       source: source
     } = opts[:projector].__projector__(:config)
 
-    config =
+    base_config =
       opts
       |> Keyword.take(~w(group only)a)
       |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
 
+    config = opts |> Keyword.get(:subscription_opts, []) |> Keyword.merge(base_config)
     source.subscribe(topic, __MODULE__, config)
   end
 

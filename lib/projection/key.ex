@@ -19,10 +19,12 @@ defmodule Kvasir.Projection.Key do
         {opts[:projection], opts[:on_error] || :error, nil}
       end
 
-    config =
+    base_config =
       opts
       |> Keyword.take(~w(group only)a)
       |> Keyword.put(:state, state)
+
+    config = opts |> Keyword.get(:subscription_opts, []) |> Keyword.merge(base_config)
 
     source.subscribe(topic, __MODULE__, config)
   end
