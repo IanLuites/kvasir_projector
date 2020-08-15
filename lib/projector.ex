@@ -86,6 +86,7 @@ defmodule Kvasir.Projector do
   def child_spec(projector) do
     %{
       id: projector,
+      type: :supervisor,
       start: {Kvasir.Projector, :start_link, [projector]}
     }
   end

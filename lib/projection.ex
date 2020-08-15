@@ -24,6 +24,7 @@ defmodule Kvasir.Projection do
 
         %{
           id: __MODULE__,
+          type: :supervisor,
           start: {@projection, :start_link, [config]}
         }
       end
