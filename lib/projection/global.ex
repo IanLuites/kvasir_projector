@@ -14,8 +14,6 @@ defmodule Kvasir.Projection.Global do
       |> Keyword.take(~w(group only)a)
       |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
 
-    IO.inspect(opts)
-
     if opts[:mode] == :batch do
       config = opts |> Keyword.get(:subscription_opts, mode: :batch) |> Keyword.merge(base_config)
       source.subscribe(topic, __MODULE__.Batched, config)
@@ -40,9 +38,64 @@ defmodule Kvasir.Projection.Global do
     @work_pool 30
 
     def init(_topic, _partition, projection) do
-      workers = Enum.map(1..@work_pool, fn _ -> spawn_worker(projection) end)
+      supervisor = spawn_link(__MODULE__, :supervisor, [projection])
+      {:ok, supervisor}
+    end
 
-      {:ok, {projection, workers}}
+    def event_async_batch(ack, events, supervisor) do
+      send(supervisor, {:event_set, ack, events})
+      :ok
+    end
+
+    def supervisor(projection) do
+      workers = Enum.map(1..@work_pool, fn _ -> spawn_worker(projection) end)
+      wait_for_events(projection, workers)
+    end
+
+    defp wait_for_events(projection, workers) do
+      receive do
+        {:event_set, ack, events = [e | _]} ->
+          acker = {ack, [e.__meta__.offset - 1]}
+          distribute_work(acker, projection, workers, events)
+      end
+
+      wait_for_events(projection, workers)
+    end
+
+    defp do_ack({ack, offsets}, %{__meta__: %{offset: o}}) do
+      case ack_calculate(offsets, o) do
+        {:no_ack, off} ->
+          {ack, off}
+
+        {:ack, v, off} ->
+          ack.(v)
+          {ack, off}
+      end
+    end
+
+    defp ack_calculate([h | t], insert) do
+      if h == insert - 1 do
+        {at, left} = split_trail([insert | t])
+        {:ack, at, left}
+      else
+        {:no_ack, [h | sorted_insert(t, insert)]}
+      end
+    end
+
+    defp split_trail(list)
+    defp split_trail([e]), do: {e, [e]}
+
+    defp split_trail(f = [a, b | t]) do
+      if a == b - 1, do: split_trail([b | t]), else: {a, f}
+    end
+
+    defp sorted_insert(list, insert, acc \\ [])
+    defp sorted_insert([], insert, acc), do: :lists.reverse([insert | acc])
+
+    defp sorted_insert([h | t], insert, acc) do
+      if h < insert,
+        do: sorted_insert(t, insert, [h | acc]),
+        else: :lists.reverse([insert | acc]) ++ t
     end
 
     defp spawn_worker(projection) do
@@ -53,31 +106,27 @@ defmodule Kvasir.Projection.Global do
       end
     end
 
-    def event_batch(events, {projection, workers}) do
-      distribute_work(projection, workers, events)
-    end
+    defp distribute_work(ack, projection, workers, events, busy \\ %{})
 
-    defp distribute_work(projection, workers, events, busy \\ %{})
-
-    defp distribute_work(projection, [worker | workers], [event | events], busy) do
+    defp distribute_work(ack, projection, [worker | workers], [event | events], busy) do
       ref = make_ref()
       send(worker, {:work, ref, event})
-      distribute_work(projection, workers, events, Map.put(busy, ref, {worker, event}))
+      distribute_work(ack, projection, workers, events, Map.put(busy, ref, {worker, event}))
     end
 
-    defp distribute_work(projection, workers, [], busy) do
+    defp distribute_work(ack, projection, workers, [], busy) do
       if busy == %{} do
         :ok
       else
-        wait_for_result(projection, workers, [], busy)
+        wait_for_result(ack, projection, workers, [], busy)
       end
     end
 
-    defp distribute_work(projection, [], events, busy) do
-      wait_for_result(projection, [], events, busy)
+    defp distribute_work(ack, projection, [], events, busy) do
+      wait_for_result(ack, projection, [], events, busy)
     end
 
-    defp wait_for_result(projection, workers, events, busy) do
+    defp wait_for_result(ack, projection, workers, events, busy) do
       receive do
         {:DOWN, _ref, :process, worker, reason} ->
           if worker in workers do
@@ -88,7 +137,7 @@ defmodule Kvasir.Projection.Global do
             end)
 
             w = [spawn_worker(projection) | Enum.reject(workers, &(&1 == worker))]
-            distribute_work(projection, w, events, busy)
+            distribute_work(ack, projection, w, events, busy)
           else
             ref = Enum.find_value(busy, fn {k, {w, _}} -> if(w == worker, do: k) end)
             {{_worker, event}, b} = Map.pop!(busy, ref)
@@ -102,15 +151,27 @@ defmodule Kvasir.Projection.Global do
               event: event
             )
 
-            distribute_work(projection, [spawn_worker(projection) | workers], [event | events], b)
+            distribute_work(
+              ack,
+              projection,
+              [spawn_worker(projection) | workers],
+              [event | events],
+              b
+            )
           end
 
         {:done, ref} ->
-          {{worker, _event}, b} = Map.pop!(busy, ref)
-          distribute_work(projection, [worker | workers], events, b)
+          {{worker, event}, b} = Map.pop!(busy, ref)
+          distribute_work(do_ack(ack, event), projection, [worker | workers], events, b)
 
         {:done, _ref, err} ->
-          err
+          msg = """
+          "Projector<#{inspect(elem(projection, 0))}>: Projection stuck on: #{inspect(err)}
+          """
+
+          Logger.error(msg, projection: elem(projection, 0), error: err)
+
+          raise msg
       end
     end
 
