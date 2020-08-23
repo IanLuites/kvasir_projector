@@ -1,4 +1,6 @@
 defmodule Kvasir.Projection do
+  @default_concurrency 30
+
   defmacro __using__(opts \\ []) do
     name = Macro.expand(opts[:name], __CALLER__) || inspect(__CALLER__.module)
     back_off = opts[:back_off] || [to: __MODULE__.BackOff, as: :standard]
@@ -11,7 +13,22 @@ defmodule Kvasir.Projection do
         s -> raise "Unknown state: #{inspect(s)}"
       end
 
-    subscribe_opts = opts |> Keyword.take(~w(only on_error persist)a) |> Keyword.put(:group, name)
+    subscribe_opts =
+      opts |> Keyword.take(~w(only on_error persist mode)a) |> Keyword.put(:group, name)
+
+    concurrency =
+      case opts[:concurrency] do
+        c when is_integer(c) and c >= 1 ->
+          c
+
+        c when is_binary(c) ->
+          p = if c =~ ~r/^[0-9]+$/, do: c, else: System.get_env(c, "30")
+          r = String.to_integer(p)
+          if r >= 1, do: r, else: @default_concurrency
+
+        _ ->
+          @default_concurrency
+      end
 
     quote location: :keep do
       @behaviour unquote(type)
@@ -34,7 +51,9 @@ defmodule Kvasir.Projection do
       defdelegate back_off(attempt), unquote(back_off)
 
       @doc false
-      @spec __projection__(:stateful) :: term
+      @spec __projection__(:concurrency | :mode | :stateful) :: term
+      def __projection__(:concurrency), do: unquote(concurrency)
+      def __projection__(:mode), do: unquote(opts[:mode] || :single)
       def __projection__(:stateful), do: unquote(type != __MODULE__.Global)
     end
   end
