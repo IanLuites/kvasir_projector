@@ -1,7 +1,10 @@
 defmodule Kvasir.Projection.Global do
   alias Kvasir.Projection
 
+  @callback init(topic :: String.t(), partition :: non_neg_integer) :: :ok | {:error, atom}
   @callback apply(Kvasir.Event.t()) :: :ok | {:error, atom}
+
+  @optional_callbacks init: 2
 
   def start_link(opts \\ []) do
     %{
@@ -23,7 +26,13 @@ defmodule Kvasir.Projection.Global do
     end
   end
 
-  def init(_topic, _partition, projection), do: {:ok, projection}
+  def init(topic, partition, projection) do
+    if :erlang.function_exported(projection, :init, 2) do
+      with :ok <- projection.init(topic, partition), do: {:ok, projection}
+    else
+      {:ok, projection}
+    end
+  end
 
   def event(event, {projection, on_error}) do
     case Projection.apply(projection, event, on_error) do
@@ -35,11 +44,17 @@ defmodule Kvasir.Projection.Global do
 
   defmodule Batched do
     require Logger
-    @work_pool 30
 
-    def init(_topic, _partition, projection) do
-      supervisor = spawn_link(__MODULE__, :supervisor, [projection])
-      {:ok, supervisor}
+    def init(topic, partition, projection) do
+      if :erlang.function_exported(projection, :init, 2) do
+        with :ok <- projection.init(topic, partition) do
+          supervisor = spawn_link(__MODULE__, :supervisor, [projection])
+          {:ok, supervisor}
+        end
+      else
+        supervisor = spawn_link(__MODULE__, :supervisor, [projection])
+        {:ok, supervisor}
+      end
     end
 
     def event_async_batch(ack, events, supervisor) do
@@ -48,7 +63,8 @@ defmodule Kvasir.Projection.Global do
     end
 
     def supervisor(projection) do
-      workers = Enum.map(1..@work_pool, fn _ -> spawn_worker(projection) end)
+      work_pool = projection.__projection__(:concurrency)
+      workers = Enum.map(1..work_pool, fn _ -> spawn_worker(projection) end)
       wait_for_events(projection, workers)
     end
 
