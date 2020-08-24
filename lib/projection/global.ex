@@ -26,9 +26,9 @@ defmodule Kvasir.Projection.Global do
     end
   end
 
-  def init(topic, partition, projection) do
-    if :erlang.function_exported(projection, :init, 2) do
-      with :ok <- projection.init(topic, partition), do: {:ok, projection}
+  def init(topic, partition, projection = {p, _}) do
+    if :erlang.function_exported(p, :init, 2) do
+      with :ok <- p.init(topic, partition), do: {:ok, projection}
     else
       {:ok, projection}
     end
@@ -45,9 +45,9 @@ defmodule Kvasir.Projection.Global do
   defmodule Batched do
     require Logger
 
-    def init(topic, partition, projection) do
-      if :erlang.function_exported(projection, :init, 2) do
-        with :ok <- projection.init(topic, partition) do
+    def init(topic, partition, projection = {p, _}) do
+      if :erlang.function_exported(p, :init, 2) do
+        with :ok <- p.init(topic, partition) do
           supervisor = spawn_link(__MODULE__, :supervisor, [projection])
           {:ok, supervisor}
         end
@@ -62,8 +62,8 @@ defmodule Kvasir.Projection.Global do
       :ok
     end
 
-    def supervisor(projection) do
-      work_pool = projection.__projection__(:concurrency)
+    def supervisor(projection = {p, _}) do
+      work_pool = p.__projection__(:concurrency)
       workers = Enum.map(1..work_pool, fn _ -> spawn_worker(projection) end)
       wait_for_events(projection, workers)
     end
