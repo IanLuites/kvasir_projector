@@ -1,10 +1,10 @@
 defmodule Kvasir.Projector.MixProject do
   use Mix.Project
-  @version "0.0.3"
+  @version "0.0.5"
 
   def project do
     [
-      app: :kvasir_projector,
+      app: :csh2fjhyll_kvasir_projector,
       description: "Kvasir projector extension to for allow event projection.",
       version: @version,
       elixir: "~> 1.7",
@@ -36,11 +36,13 @@ defmodule Kvasir.Projector.MixProject do
 
   def package do
     [
-      name: :kvasir_projector,
+      name: :csh2fjhyll_kvasir_projector,
       maintainers: ["Ian Luites"],
       licenses: ["MIT"],
       files: [
         # Elixir
+        "lib/projection",
+        "lib/projection.ex",
         "lib/projector",
         "lib/projector.ex",
         "mix.exs",
@@ -53,7 +55,6 @@ defmodule Kvasir.Projector.MixProject do
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger]
@@ -62,7 +63,8 @@ defmodule Kvasir.Projector.MixProject do
 
   defp deps do
     [
-      {:kvasir, git: "https://github.com/IanLuites/kvasir", branch: "release/v1.0"}
+      {:csh2fjhyll_kvasir, ">= 0.0.0"},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 end
