@@ -1,5 +1,6 @@
 defmodule Kvasir.Projection.Global do
   alias Kvasir.Projection
+  alias Kvasir.Projection.Metrics
 
   @callback init(topic :: String.t(), partition :: non_neg_integer) :: :ok | {:error, atom}
   @callback apply(Kvasir.Event.t()) :: :ok | {:error, atom}
@@ -7,15 +8,21 @@ defmodule Kvasir.Projection.Global do
   @optional_callbacks init: 2
 
   def start_link(opts \\ []) do
+    projector = opts[:projector]
+    p = opts[:projection]
+
     %{
       topic: topic,
       source: source
-    } = opts[:projector].__projector__(:config)
+    } = projector.__projector__(:config)
 
     base_config =
       opts
       |> Keyword.take(~w(group only)a)
-      |> Keyword.put(:state, {opts[:projection], opts[:on_error] || :error})
+      |> Keyword.put(
+        :state,
+        {p, Metrics.create(projector, p), opts[:on_error] || :error}
+      )
 
     if opts[:mode] == :batch do
       config = opts |> Keyword.get(:subscription_opts, mode: :batch) |> Keyword.merge(base_config)
@@ -26,7 +33,7 @@ defmodule Kvasir.Projection.Global do
     end
   end
 
-  def init(topic, partition, projection = {p, _}) do
+  def init(topic, partition, projection = {p, _, _}) do
     if :erlang.function_exported(p, :init, 2) do
       with :ok <- p.init(topic, partition), do: {:ok, projection}
     else
@@ -34,8 +41,12 @@ defmodule Kvasir.Projection.Global do
     end
   end
 
-  def event(event, {projection, on_error}) do
-    case Projection.apply(projection, event, on_error) do
+  def event(event, {projection, metrics, on_error}) do
+    start = :erlang.monotonic_time()
+    result = Projection.apply(projection, event, on_error)
+    metrics.send(result, start, event)
+
+    case result do
       :ok -> :ok
       {:ok, _} -> :ok
       err -> err

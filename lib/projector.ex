@@ -92,6 +92,8 @@ defmodule Kvasir.Projector do
   end
 
   def start_link(projector) do
+    Kvasir.Projector.Metrics.create()
+
     children =
       :projections
       |> projector.__projector__()

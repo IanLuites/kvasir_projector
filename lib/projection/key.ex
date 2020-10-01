@@ -4,19 +4,23 @@ defmodule Kvasir.Projection.Key do
               :ok | {:ok, state :: term} | :delete | {:error, atom}
 
   alias Kvasir.Event
+  alias Kvasir.Projection.Metrics
 
   def start_link(opts \\ []) do
+    projector = opts[:projector]
+    p = opts[:projection]
+
     %{
       state: {cache, _},
       topic: topic,
       source: source
-    } = opts[:projector].__projector__(:config)
+    } = projector.__projector__(:config)
 
     state =
       if opts[:persist] do
-        {opts[:projection], opts[:on_error] || :error, cache}
+        {p, Metrics.create(projector, p), opts[:on_error] || :error, cache}
       else
-        {opts[:projection], opts[:on_error] || :error, nil}
+        {p, Metrics.create(projector, p), opts[:on_error] || :error, nil}
       end
 
     base_config =
@@ -29,25 +33,33 @@ defmodule Kvasir.Projection.Key do
     source.subscribe(topic, __MODULE__, config)
   end
 
-  def init(_topic, partition, {projection, on_error, cache}) do
+  def init(_topic, partition, {projection, metrics, on_error, cache}) do
     registry = Module.concat(projection, "Registry#{partition}")
     supervisor = Module.concat(projection, "Supervisor#{partition}")
 
     with {:ok, _} <- Registry.start_link(keys: :unique, name: registry),
          {:ok, _} <-
            Supervisor.start_link([], name: supervisor, strategy: :one_for_one) do
-      {:ok, {registry, supervisor, projection, on_error, cache}}
+      {:ok, {registry, supervisor, projection, metrics, on_error, cache}}
     end
   end
 
-  def event(event, state = {registry, supervisor, projection, on_error, cache}) do
+  def event(event, state = {_, _, _, metrics, _, _}) do
+    start = :erlang.monotonic_time()
+    result = do_event(event, state)
+    metrics.send(result, start, event)
+
+    result
+  end
+
+  defp do_event(event, state = {registry, supervisor, projection, _, on_error, cache}) do
     key = Event.key(event)
 
     with {:ok, p} <- projection(registry, supervisor, projection, on_error, key, cache),
          :ok <- project(p, event) do
       :ok
     else
-      {:error, :projection_died} -> event(event, state)
+      {:error, :projection_died} -> do_event(event, state)
       err -> err
     end
   end
