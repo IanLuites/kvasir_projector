@@ -33,6 +33,12 @@ defmodule Kvasir.Projector do
       """
     end
 
+    projection_opts = [
+      retry: Keyword.get(opts, :retry, back_off: {:exp, 250, 2}, limit: 25_000),
+      report: Keyword.get(opts, :report, false),
+      subscription_opts: Keyword.get(opts, :subscription_opts, [])
+    ]
+
     # Disabled environments
     unless Mix.env() in (opts[:disable] || []) do
       quote location: :keep do
@@ -43,6 +49,7 @@ defmodule Kvasir.Projector do
         @topic unquote(topic)
         @state unquote(state && {state, Macro.escape(state_opts)})
         @projections unquote(projections)
+        @projection_opts unquote(Macro.escape(projection_opts))
 
         @doc false
         @spec child_spec(opts :: Keyword.t()) :: Supervisor.child_spec()
@@ -57,6 +64,7 @@ defmodule Kvasir.Projector do
         def __projector__(:config),
           do: %{
             projections: @projections,
+            projection_opts: @projection_opts,
             projector: __MODULE__,
             source: @source,
             state: @state,
@@ -64,6 +72,7 @@ defmodule Kvasir.Projector do
           }
 
         def __projector__(:projections), do: @projections
+        def __projector__(:projection_opts), do: @projection_opts
         def __projector__(:projector), do: __MODULE__
         def __projector__(:source), do: @source
         def __projector__(:state), do: @state
@@ -94,10 +103,12 @@ defmodule Kvasir.Projector do
   def start_link(projector) do
     Kvasir.Projector.Metrics.create()
 
+    inherit = projector.__projector__(:projection_opts)
+
     children =
       :projections
       |> projector.__projector__()
-      |> Enum.map(& &1.child_spec(projector: projector, projection: &1))
+      |> Enum.map(& &1.child_spec(projection_opts: inherit, projector: projector, projection: &1))
       |> Enum.reject(&(&1 == :no_start))
 
     caches =

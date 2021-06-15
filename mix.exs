@@ -1,6 +1,6 @@
 defmodule Kvasir.Projector.MixProject do
   use Mix.Project
-  @version "0.0.5"
+  @version "0.0.6"
 
   def project do
     [

@@ -19,6 +19,9 @@ defmodule Kvasir.Projector.Config do
     end
   end
 
+  def keys
+  def keys, do: ~w(only on_error persist mode subscription_opts)a
+
   def projections!(opts),
     do: projections(opts) || raise("projections not set for projector or in config.")
 end

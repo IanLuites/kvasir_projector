@@ -1,4 +1,5 @@
 defmodule Kvasir.Projection do
+  alias Kvasir.Projector.Config
   @default_concurrency 30
 
   defmacro __using__(opts \\ []) do
@@ -13,8 +14,7 @@ defmodule Kvasir.Projection do
         s -> raise "Unknown state: #{inspect(s)}"
       end
 
-    subscribe_opts =
-      opts |> Keyword.take(~w(only on_error persist mode)a) |> Keyword.put(:group, name)
+    static_opts = opts |> Keyword.take(Config.keys()) |> Keyword.put(:group, name)
 
     concurrency =
       case opts[:concurrency] do
@@ -37,7 +37,8 @@ defmodule Kvasir.Projection do
       @doc false
       @spec child_spec(Keyword.t()) :: Supervisor.child_spec()
       def child_spec(opts \\ []) do
-        config = Keyword.merge(unquote(subscribe_opts), opts)
+        {projector, opts} = Keyword.pop(opts, :projection_opts, [])
+        config = projector |> Keyword.merge(unquote(static_opts)) |> Keyword.merge(opts)
 
         %{
           id: __MODULE__,
@@ -63,33 +64,26 @@ defmodule Kvasir.Projection do
   @doc false
   @spec apply(module, Kvasir.Event.t(), fun) :: :ok | {:error, atom}
   def apply(projection, event, on_error),
-    do: __apply__(projection, event, on_error, 0)
+    do: __apply__(projection, event, :no_state, on_error, nil)
 
   @spec apply(module, Kvasir.Event.t(), state :: term, fun) ::
           :ok | {:ok, state :: term} | :delete | {:error, atom}
   def apply(projection, event, state, on_error),
-    do: __apply__(projection, event, state, on_error, 0)
+    do: __apply__(projection, event, {:state, state}, on_error, nil)
 
-  defp __apply__(projection, event, on_error, attempt) do
-    with err when err != :ok <- projection.apply(event) do
-      Logger.error("Projection Failed<#{inspect(__MODULE__)}>: #{inspect(err)}",
-        event: event,
-        projection: __MODULE__,
-        projection_type: :global,
-        error: err,
-        attempt: attempt
-      )
+  defp do_apply(projection, event, state)
+  defp do_apply(projection, event, :no_state), do: projection.apply(event)
+  defp do_apply(projection, event, {:state, state}), do: projection.apply(event, state)
 
-      cond do
-        handle_error(err, on_error) == :ok -> :ok
-        projection.back_off(attempt) != :retry -> err
-        :retry -> __apply__(projection, event, on_error, attempt + 1)
+  defp __apply__(projection, event, state, on_error, context) do
+    result =
+      try do
+        do_apply(projection, event, state)
+      rescue
+        err -> err
       end
-    end
-  end
 
-  defp __apply__(projection, event, state, on_error, attempt) do
-    case projection.apply(event, state) do
+    case result do
       :ok ->
         :ok
 
@@ -100,28 +94,34 @@ defmodule Kvasir.Projection do
         r
 
       err ->
-        Logger.error("Projection Failed<#{inspect(__MODULE__)}>: #{inspect(err)}",
-          event: event,
-          projection: __MODULE__,
-          projection_type: :stateful,
-          error: err,
-          attempt: attempt
-        )
+        ctx =
+          if is_map(context) do
+            %{context | history: [err | context.history], attempts: context.attempts + 1}
+          else
+            %Kvasir.Projection.Context{
+              projection: projection,
+              projection_type: if(state == :no_state, do: :global, else: :stateful),
+              history: [err],
+              attempts: 1,
+              event: event
+            }
+          end
 
         cond do
-          handle_error(err, on_error) == :ok -> :ok
-          projection.back_off(attempt) != :retry -> err
-          :retry -> __apply__(projection, event, state, on_error, attempt + 1)
+          handle_error(err, ctx, on_error) == :ok -> :ok
+          projection.back_off(ctx.attempts) != :retry -> err
+          :retry -> __apply__(projection, event, state, on_error, ctx.attempts)
         end
     end
   end
 
-  def handle_error(err, :error), do: err
+  def handle_error(err, _ctx, :error), do: err
 
-  def handle_error(err, :skip) do
-    Logger.warn(fn -> "Projection Skipped: #{inspect(err)}" end)
+  def handle_error(err, ctx, :skip) do
+    Logger.warn(fn -> "Projection Skipped: #{inspect(err)}" end, context: ctx)
     :ok
   end
 
-  def handle_error(err, callback) when is_function(callback, 1), do: callback.(err)
+  def handle_error(err, _ctx, callback) when is_function(callback, 1), do: callback.(err)
+  def handle_error(err, ctx, callback) when is_function(callback, 2), do: callback.(err, ctx)
 end
